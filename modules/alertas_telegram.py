@@ -1,9 +1,11 @@
 """
 Módulo de Alertas - Bot do Telegram.
 Envia avisos quando vagas mapeadas há mais de 2 dias ainda não tiveram currículo enviado.
+Cada novo envio apaga as mensagens anteriores para não encher o feed.
 """
 
 import asyncio
+import json
 import streamlit as st
 
 from database import (
@@ -14,40 +16,65 @@ from database import (
 
 CHAVE_TOKEN = "telegram_bot_token"
 CHAVE_CHAT_ID = "telegram_chat_id"
+CHAVE_MSG_IDS = "telegram_alert_msg_ids"
 
 
 def _enviar_mensagem_telegram(
     token: str, chat_id: str, texto: str, usar_markdown: bool = False
-) -> tuple[bool, str]:
+) -> tuple[bool, str, int | None]:
     """
     Envia mensagem via Telegram Bot API.
-    Retorna (sucesso, mensagem_erro).
-    Por padrão usa texto simples (Markdown desativado) para evitar erros com caracteres especiais.
+    Retorna (sucesso, mensagem_erro, message_id ou None).
     """
     try:
         from telegram import Bot
 
-        # Limpa chat_id (remove espaços e caracteres não numéricos para IDs de usuário)
         chat_id_limpo = "".join(c for c in str(chat_id).strip() if c.isdigit() or c == "-")
         if not chat_id_limpo:
-            return False, "Chat ID inválido. Use apenas números."
+            return False, "Chat ID inválido. Use apenas números.", None
 
         async def _send():
             bot = Bot(token=token.strip())
             kwargs = {"chat_id": chat_id_limpo, "text": texto}
             if usar_markdown:
                 kwargs["parse_mode"] = "Markdown"
-            await bot.send_message(**kwargs)
+            msg = await bot.send_message(**kwargs)
+            return msg.message_id
 
-        asyncio.run(_send())
-        return True, ""
+        msg_id = asyncio.run(_send())
+        return True, "", msg_id
     except Exception as e:
-        return False, str(e)
+        return False, str(e), None
+
+
+def _deletar_mensagens_anteriores(token: str, chat_id: str, msg_ids: list[int]) -> None:
+    """Deleta mensagens de alertas anteriores no Telegram."""
+    if not msg_ids:
+        return
+    try:
+        from telegram import Bot
+
+        chat_id_limpo = "".join(c for c in str(chat_id).strip() if c.isdigit() or c == "-")
+        if not chat_id_limpo:
+            return
+
+        async def _delete():
+            bot = Bot(token=token.strip())
+            for mid in msg_ids:
+                try:
+                    await bot.delete_message(chat_id=chat_id_limpo, message_id=int(mid))
+                except Exception:
+                    pass  # Mensagem pode já ter sido apagada
+
+        asyncio.run(_delete())
+    except Exception:
+        pass
 
 
 def verificar_e_enviar_alertas() -> tuple[int, list[str]]:
     """
     Envia alertas no Telegram para vagas Mapeada, Em Adaptação e com Data limite.
+    Apaga todas as mensagens de alerta anteriores antes de enviar as novas.
     Retorna (quantidade_enviada, lista_de_erros).
     """
     token = obter_config(CHAVE_TOKEN)
@@ -56,9 +83,20 @@ def verificar_e_enviar_alertas() -> tuple[int, list[str]]:
     if not token or not chat_id:
         return 0, ["Configure o Bot Token e Chat ID nas configurações acima."]
 
+    # Apagar mensagens de alerta anteriores
+    ids_json = obter_config(CHAVE_MSG_IDS)
+    if ids_json:
+        try:
+            ids_antigos = json.loads(ids_json)
+            _deletar_mensagens_anteriores(token, chat_id, ids_antigos)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        salvar_config(CHAVE_MSG_IDS, "[]")
+
     vagas = listar_vagas_para_alerta()
     erros = []
     enviados = 0
+    novos_ids = []
 
     for vaga in vagas:
         cargo = vaga.get("cargo", "Vaga")
@@ -88,11 +126,16 @@ def verificar_e_enviar_alertas() -> tuple[int, list[str]]:
         else:
             msg += "\nAbra o CRM para ver os detalhes."
 
-        ok, err = _enviar_mensagem_telegram(token, chat_id, msg, usar_markdown=False)
+        ok, err, msg_id = _enviar_mensagem_telegram(token, chat_id, msg, usar_markdown=False)
         if ok:
             enviados += 1
+            if msg_id is not None:
+                novos_ids.append(msg_id)
         else:
             erros.append(f"{vaga['empresa']} - {vaga['cargo']}: {err}")
+
+    if novos_ids:
+        salvar_config(CHAVE_MSG_IDS, json.dumps(novos_ids))
 
     return enviados, erros
 
@@ -155,7 +198,7 @@ def render():
         if not token or not chat_id:
             st.error("Configure Token e Chat ID acima antes de testar.")
         else:
-            ok, err = _enviar_mensagem_telegram(
+            ok, err, _ = _enviar_mensagem_telegram(
                 token, chat_id,
                 "✅ Teste do CRM Busca de Emprego: sua configuração está funcionando!",
                 usar_markdown=False,
