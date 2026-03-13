@@ -9,12 +9,11 @@ import streamlit as st
 from database import (
     obter_config,
     salvar_config,
-    listar_vagas_mapeadas_antigas,
+    listar_vagas_para_alerta,
 )
 
 CHAVE_TOKEN = "telegram_bot_token"
 CHAVE_CHAT_ID = "telegram_chat_id"
-DIAS_ALERTA = 2
 
 
 def _enviar_mensagem_telegram(
@@ -48,7 +47,7 @@ def _enviar_mensagem_telegram(
 
 def verificar_e_enviar_alertas() -> tuple[int, list[str]]:
     """
-    Verifica vagas mapeadas há mais de 2 dias e envia alertas no Telegram.
+    Envia alertas no Telegram para vagas Mapeada, Em Adaptação e com Data limite.
     Retorna (quantidade_enviada, lista_de_erros).
     """
     token = obter_config(CHAVE_TOKEN)
@@ -57,7 +56,7 @@ def verificar_e_enviar_alertas() -> tuple[int, list[str]]:
     if not token or not chat_id:
         return 0, ["Configure o Bot Token e Chat ID nas configurações acima."]
 
-    vagas = listar_vagas_mapeadas_antigas(dias=DIAS_ALERTA)
+    vagas = listar_vagas_para_alerta()
     erros = []
     enviados = 0
 
@@ -102,8 +101,8 @@ def render():
     """Renderiza o módulo de Alertas Telegram."""
     st.title("Alertas via Telegram")
     st.caption(
-        "Configure seu bot e receba avisos quando: vagas Mapeada/Em Adaptação há mais de 2 dias "
-        "sem envio, ou quando houver data limite nos próximos 3 dias."
+        "Configure seu bot e receba avisos das vagas em Mapeada e Em Adaptação, "
+        "além de qualquer outra que tenha Data limite definida no CRM."
     )
 
     st.divider()
@@ -143,7 +142,7 @@ def render():
     st.divider()
     st.subheader("Verificar e enviar alertas")
 
-    vagas_pendentes = listar_vagas_mapeadas_antigas(dias=DIAS_ALERTA)
+    vagas_pendentes = listar_vagas_para_alerta()
 
     st.info(
         "💡 **Importante:** Envie /start para o seu bot no Telegram antes de testar. "
@@ -171,7 +170,7 @@ def render():
     if vagas_pendentes:
         st.warning(
             f"Encontradas **{len(vagas_pendentes)}** vaga(s) para alerta "
-            f"(mapeadas há 2+ dias sem envio ou com data limite próxima):"
+            f"(Mapeada, Em Adaptação ou com Data limite definida):"
         )
         for v in vagas_pendentes:
             info = v.get("criado_em", "")[:10]
@@ -179,7 +178,7 @@ def render():
                 info = f"limite {v['data_limite']}"
             st.markdown(f"- **{v['cargo']}** @ {v['empresa']} ({v['status']}) — {info}")
     else:
-        st.info("Nenhuma vaga pendente de alerta no momento.")
+        st.info("Nenhuma vaga para alerta no momento.")
 
     if st.button("Enviar alertas agora", type="primary", key="btn_enviar_alertas"):
         enviados, erros = verificar_e_enviar_alertas()

@@ -239,29 +239,21 @@ def excluir_vaga(vaga_id: int) -> bool:
     return affected > 0
 
 
-def listar_vagas_mapeadas_antigas(dias: int = 2) -> list[dict]:
+def listar_vagas_para_alerta() -> list[dict]:
     """
-    Retorna vagas para alerta: status Mapeada/Em Adaptação há mais de X dias,
-    OU com data_limite nos próximos dias (qualquer status exceto Rejeitada).
-    Evita duplicatas via SELECT DISTINCT.
+    Retorna vagas para alerta Telegram:
+    - Status Mapeada ou Em Adaptação (sempre)
+    - OU qualquer outro status (exceto Rejeitada) que tenha data_limite preenchida
     """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT DISTINCT v.* FROM vagas v
-        WHERE v.id IN (
-            SELECT id FROM vagas
-            WHERE (status IN ('Mapeada', 'Em Adaptação')
-                   AND date(criado_em) <= date('now', '-' || ? || ' days'))
-            OR (status != 'Rejeitada'
-                AND data_limite IS NOT NULL
-                AND date(data_limite) >= date('now')
-                AND date(data_limite) <= date('now', '+' || ? || ' days'))
-        )
+        SELECT * FROM vagas
+        WHERE status IN ('Mapeada', 'Em Adaptação')
+           OR (status != 'Rejeitada' AND data_limite IS NOT NULL)
         ORDER BY COALESCE(data_limite, '9999-99-99') ASC, criado_em ASC
         """,
-        (dias, 3),
     )
     rows = cursor.fetchall()
     conn.close()

@@ -205,10 +205,26 @@ def render_editar_vaga(vaga_id: int):
 
 def render_tabela(vagas: list):
     """Renderiza a lista de vagas em formato tabela com cores por status."""
+    # CSS para selectbox mostrar texto completo (evita truncar Currículo Enviado, Em Adaptação)
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+            min-width: 200px !important;
+            width: 100% !important;
+        }
+        div[data-testid="stSelectbox"] [role="listbox"] div {
+            white-space: normal !important;
+            max-width: 100% !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     for v in vagas:
         cor = CORES_STATUS.get(v["status"], "#f5f5f5")
         with st.container():
-            col_status, col_info, col_acoes = st.columns([1, 4, 2])
+            col_status, col_info, col_acoes = st.columns([2, 4, 2])
             with col_status:
                 novo_status = st.selectbox(
                     "Status",

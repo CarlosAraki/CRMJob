@@ -89,11 +89,16 @@ def render():
     # Cargo e localização
     col_cargo, col_local = st.columns(2)
     with col_cargo:
-        cargo = st.selectbox(
+        cargo_select = st.selectbox(
             "Cargo para busca",
             options=CARGOS,
             index=0,
             help="Cargos priorizados conforme seu currículo",
+        )
+        cargo_aux = st.text_input(
+            "Ou digite outro cargo",
+            placeholder="Ex: Arquiteto de Soluções, Engenheiro de Dados...",
+            key="atalhos_cargo_aux",
         )
     with col_local:
         local = st.selectbox(
@@ -102,6 +107,7 @@ def render():
             index=0,
         )
 
+    cargo = cargo_aux.strip() if cargo_aux and cargo_aux.strip() else cargo_select
     links = _montar_links(cargo, local)
 
     st.subheader("Top 10 plataformas de vagas no Brasil")
@@ -131,3 +137,25 @@ def render():
                     use_container_width=True,
                     help=desc,
                 )
+
+    st.divider()
+    st.subheader("🏥 Plataformas hospitalares")
+    st.caption("Carreiras em hospitais e redes de saúde (busca manual no site):")
+
+    plataformas_hospitais = [
+        (
+            "Albert Einstein",
+            "https://career8.successfactors.com/career?company=C0001240283P&career_ns=job_listing_summary&navBarLevel=JOB_SEARCH",
+            "São Paulo — Hospital Israelita Albert Einstein",
+        ),
+    ]
+
+    cols_h = st.columns(2)
+    for idx, (nome, url, desc) in enumerate(plataformas_hospitais):
+        with cols_h[idx % 2]:
+            st.link_button(
+                f"🏥 {nome}",
+                url,
+                use_container_width=True,
+                help=desc,
+            )
