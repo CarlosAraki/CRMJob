@@ -146,7 +146,7 @@ def render_editar_vaga(vaga_id: int):
                     link=link or None,
                     empresa=empresa,
                     cargo=cargo,
-                    data_limite=data_limite.isoformat(),
+                    data_limite=data_limite.isoformat() if data_limite else None,
                     descricao=descricao,
                     status=status,
                     plataforma=plataforma.strip() or None,
