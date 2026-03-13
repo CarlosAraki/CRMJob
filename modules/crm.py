@@ -5,6 +5,12 @@ Módulo 1: CRM - Funil de Vagas (Kanban/Tabela interativa).
 import streamlit as st
 from datetime import datetime
 
+try:
+    import pyperclip
+    PYPERCLIP_OK = True
+except ImportError:
+    PYPERCLIP_OK = False
+
 from database import (
     init_db,
     listar_vagas,
@@ -258,6 +264,16 @@ def render_tabela(vagas: list):
                     st.caption(f"[Ver vaga]({v['link']})")
 
             with col_acoes:
+                texto_share = f"{v['cargo']} @ {v['empresa']}\n{v.get('link', '') or ''}".strip()
+                if st.button("📋", key=f"copy_{v['id']}", help="Copiar para enviar (WhatsApp etc.)"):
+                    if PYPERCLIP_OK:
+                        try:
+                            pyperclip.copy(texto_share)
+                            st.toast("Copiado! Cole no WhatsApp ou mensagem.")
+                        except Exception:
+                            st.warning("Selecione e copie: " + texto_share[:80] + "...")
+                    else:
+                        st.code(texto_share, language=None)
                 if st.button("📝 Editar", key=f"edit_{v['id']}"):
                     st.session_state["crm_editar_vaga_id"] = v["id"]
                     st.rerun()
@@ -309,17 +325,28 @@ def render_kanban(vagas: list, ocultar_rejeitadas: bool = True):
                     if v.get("data_limite"):
                         st.caption(f"📅 {v['data_limite']}")
 
-                    col_a, col_b, col_c = st.columns(3)
+                    texto_share = f"{v['cargo']} @ {v['empresa']}\n{v.get('link', '') or ''}".strip()
+                    col_a, col_b, col_c, col_d = st.columns(4)
                     with col_a:
+                        if st.button("📋", key=f"k_copy_{i}_{v['id']}", help="Copiar para enviar"):
+                            if PYPERCLIP_OK:
+                                try:
+                                    pyperclip.copy(texto_share)
+                                    st.toast("Copiado!")
+                                except Exception:
+                                    st.warning("Copie manualmente: " + texto_share[:60] + "...")
+                            else:
+                                st.code(texto_share[:200])
+                    with col_b:
                         if st.button("📝", key=f"k_edit_{i}_{v['id']}", help="Editar"):
                             st.session_state["crm_editar_vaga_id"] = v["id"]
                             st.rerun()
-                    with col_b:
+                    with col_c:
                         if st.button("📄", key=f"k_docs_{i}_{v['id']}", help="Documentos"):
                             st.session_state["curriculums_vaga_id"] = v["id"]
                             st.session_state["navegar_para"] = "curriculums"
                             st.rerun()
-                    with col_c:
+                    with col_d:
                         if st.button("📋", key=f"k_prompt_{i}_{v['id']}", help="Gerar Prompt"):
                             st.session_state["gerador_vaga_id"] = v["id"]
                             st.session_state["navegar_para"] = "gerador_prompts"

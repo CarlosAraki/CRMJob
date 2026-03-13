@@ -12,7 +12,7 @@ import requests
 import streamlit as st
 from bs4 import BeautifulSoup
 
-from database import inserir_vaga, listar_vagas
+from database import inserir_vaga, listar_vagas, listar_vagas_interesse_pendentes, inserir_vaga_interesse
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -204,27 +204,6 @@ def _crawl_vaga(url: str) -> dict:
     return resultado
 
 
-# Vagas de interesse pré-carregadas (do perfil do usuário)
-VAGAS_INTERESSE = [
-    ("https://job-boards.greenhouse.io/agibank/jobs/5115376008?gh_src=LinkedIn", "Agibank", "IT Architecture Manager", "Greenhouse", "Campinas/SP"),
-    ("https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers/job/CAMPINAS/SSD-Brasil---IT-Leader--Data-Center-_Req1506712", "Santander", "IT Leader - Data Center", "Workday", "Campinas"),
-    ("https://careers.unilever.com/en/job/-/-/34155/92655028112", "Unilever", "Coordenador de Tecnologia e Inovação Packing", "Unilever Careers", "Vinhedo/SP"),
-    ("https://kpmg.inhire.app/vagas/560350ce-3465-43fd-b6f3-2f6e64a65fa6/gerente-de-transformacao-ia-latam", "KPMG", "Gerente de Transformação IA Latam", "InHire", "Remoto"),
-    ("https://meta.jobs.recrut.ai/vagas/job/YBXY4J?source=linkedin", "Meta", "Tech Lead I", "Recrut.AI", "Remoto"),
-    ("https://cpqd.recruitee.com/o/gerente-executivo-de-solucoes-foco-em-ia-e-ciencia-de-dados", "CPQD", "Gerente Executivo - IA e Ciência de Dados", "Recruitee", "Campinas (Híbrido)"),
-    ("https://unimedcampinas.gupy.io/job/eyJqb2JJZCI6MTA3MTIyMzQsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Unimed Campinas", "Coordenador(a) de Processos", "Gupy", "Campinas"),
-    ("https://hospitalcare.gupy.io/job/eyJqb2JJZCI6MTA4MjUzMjIsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Hospital Care", "Coordenador de TI", "Gupy", "Rede Hospitalar"),
-    ("https://career8.successfactors.com/sfcareer/jobreqcareer?jobId=538610&company=lan", "LATAM", "Digital Team Lead", "SuccessFactors", "Santiago/Chile"),
-    ("https://voeazul.gupy.io/job/eyJqb2JJZCI6MTA5NTI0NjEsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Azul", "Supervisor Infraestrutura", "Gupy", "Campinas"),
-    ("https://careers.unilever.com/en/job/-/-/34155/92608245408", "Unilever", "Coordenador de Tecnologia e Inovação Hair", "Unilever Careers", "Vinhedo/SP"),
-    ("https://careers.deere.com/careers/job/137479375222", "John Deere", "Gerente de Data Science", "John Deere", "Indaiatuba/SP"),
-    ("https://careers.dhl.com/global/en/job/DPDHGLOBALBR38599ENGLOBALEXTERNALLUMESSELATAM/Gerência-de-TI", "DHL", "Gerência de TI", "DHL", "Campinas"),
-    ("https://ambevtech.gupy.io/jobs/10713674?jobBoardSource=linkedin", "Ambev Tech", "Gerente Tech I", "Gupy", "Campinas/Jaguariúna"),
-    ("https://rumolog.gupy.io/job/eyJqb2JJZCI6MTA4MTcwMzUsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Rumo", "Coordenador(a) Infraestrutura TI", "Gupy", "Indaiatuba/SP"),
-    ("https://grupoboticario.gupy.io/jobs/10777868?jobBoardSource=linkedin", "Grupo Boticário", "Tech Manager I (B2B e B2P)", "Gupy", "Curitiba/Remoto"),
-]
-
-
 def _vaga_ja_no_crm(link: str) -> bool:
     vagas = listar_vagas()
     return any((v.get("link") or "").strip() == link.strip() for v in vagas)
@@ -253,68 +232,91 @@ def render():
         key="import_urls_text",
     )
 
-    if st.button("Analisar e adicionar ao CRM", key="btn_analisar_urls"):
-        linhas = [l.strip() for l in urls_texto.split("\n") if l.strip()]
-        urls_validas = [u for u in linhas if u.startswith(("http://", "https://"))]
-
-        if not urls_validas:
-            st.warning("Nenhuma URL válida encontrada.")
-        else:
-            adicionadas = 0
-            with st.spinner("Analisando URLs e extraindo dados das páginas..."):
-                for url in urls_validas:
-                    if _vaga_ja_no_crm(url):
-                        continue
-                    plat, emp, cargo_sug = _parse_url(url)
-                    crawl = _crawl_vaga(url)
-                    cargo_final = (crawl.get("cargo") or cargo_sug or "Vaga").strip()
-                    descricao = (crawl.get("descricao") or f"Importada de {plat}.").strip()
-                    data_limite = crawl.get("data_limite")
-                    inserir_vaga(
-                        link=url,
-                        empresa=emp,
-                        cargo=cargo_final,
-                        data_limite=data_limite,
-                        descricao=descricao[:3000] if descricao else f"Importada de {plat}.",
-                        plataforma=plat,
-                    )
-                    adicionadas += 1
-            if adicionadas > 0:
-                st.success(f"✅ {adicionadas} vaga(s) adicionada(s) ao CRM!")
-                st.rerun()
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("Analisar e adicionar ao CRM", key="btn_analisar_urls"):
+            linhas = [l.strip() for l in urls_texto.split("\n") if l.strip()]
+            urls_validas = [u for u in linhas if u.startswith(("http://", "https://"))]
+            if not urls_validas:
+                st.warning("Nenhuma URL válida encontrada.")
             else:
-                st.info("Todas as vagas já estavam no CRM.")
+                adicionadas = 0
+                with st.spinner("Analisando URLs e extraindo dados..."):
+                    for url in urls_validas:
+                        if _vaga_ja_no_crm(url):
+                            continue
+                        plat, emp, cargo_sug = _parse_url(url)
+                        crawl = _crawl_vaga(url)
+                        cargo_final = (crawl.get("cargo") or cargo_sug or "Vaga").strip()
+                        descricao = (crawl.get("descricao") or f"Importada de {plat}.").strip()
+                        data_limite = crawl.get("data_limite")
+                        inserir_vaga(
+                            link=url, empresa=emp, cargo=cargo_final,
+                            data_limite=data_limite, descricao=descricao[:3000] or f"Importada de {plat}.",
+                            plataforma=plat,
+                        )
+                        adicionadas += 1
+                if adicionadas > 0:
+                    st.success(f"✅ {adicionadas} vaga(s) adicionada(s) ao CRM!")
+                    st.rerun()
+                else:
+                    st.info("Todas as vagas já estavam no CRM.")
+    with col_btn2:
+        if st.button("💾 Salvar em Vagas de Interesse", key="btn_salvar_interesse"):
+            linhas = [l.strip() for l in urls_texto.split("\n") if l.strip()]
+            urls_validas = [u for u in linhas if u.startswith(("http://", "https://"))]
+            if not urls_validas:
+                st.warning("Nenhuma URL válida.")
+            else:
+                salvas = 0
+                for url in urls_validas:
+                    plat, emp, cargo_sug = _parse_url(url)
+                    cid = inserir_vaga_interesse(url, emp, cargo_sug or "Vaga", plat, "")
+                    if cid > 0:
+                        salvas += 1
+                if salvas > 0:
+                    st.success(f"✅ {salvas} vaga(s) salva(s) em Vagas de Interesse!")
+                    st.rerun()
+                else:
+                    st.info("Todas já estavam na lista de interesse.")
 
     st.divider()
     st.subheader("Suas vagas de interesse")
-    st.caption("Vagas nas empresas e plataformas que você indicou. Clique para adicionar ao CRM.")
+    st.caption(
+        "Vagas salvas. As que já estão no CRM (✓) desaparecem da lista. "
+        "Clique em ➕ CRM para adicionar ao funil."
+    )
 
-    for i, (url, empresa, cargo, plataforma, local) in enumerate(VAGAS_INTERESSE):
-        ja_no_crm = _vaga_ja_no_crm(url)
+    vagas_interesse = listar_vagas_interesse_pendentes()
+    for i, vi in enumerate(vagas_interesse):
+        url = vi["url"]
         with st.container():
             col1, col2 = st.columns([4, 1])
             with col1:
-                st.markdown(f"**{cargo}** — *{empresa}*")
-                st.caption(f"📍 {local}  |  {plataforma}")
+                st.markdown(f"**{vi['cargo']}** — *{vi['empresa']}*")
+                st.caption(f"📍 {vi.get('local') or '-'}  |  {vi.get('plataforma') or '-'}")
                 st.markdown(f"[🔗 Abrir vaga]({url})")
             with col2:
-                if ja_no_crm:
-                    st.success("✓ No CRM")
-                elif st.button("➕ CRM", key=f"vi_{i}"):
+                if st.button("➕ CRM", key=f"vi_{vi['id']}"):
                     with st.spinner("Extraindo dados da página..."):
                         crawl = _crawl_vaga(url)
-                    cargo_f = (crawl.get("cargo") or cargo).strip()
-                    desc = (crawl.get("descricao") or f"Vaga em {plataforma}. Local: {local}.").strip()
+                    cargo_f = (crawl.get("cargo") or vi["cargo"]).strip()
+                    plat = vi.get("plataforma") or ""
+                    local = vi.get("local") or ""
+                    desc = (crawl.get("descricao") or f"Vaga em {plat}. Local: {local}.").strip()
                     data_lim = crawl.get("data_limite")
                     inserir_vaga(
                         link=url,
-                        empresa=empresa,
+                        empresa=vi["empresa"],
                         cargo=cargo_f,
                         data_limite=data_lim,
-                        descricao=desc[:3000] if desc else f"Vaga em {plataforma}. Local: {local}.",
-                        plataforma=plataforma,
+                        descricao=desc[:3000] if desc else f"Vaga em {plat}.",
+                        plataforma=plat,
                     )
-                    st.success("Adicionada!")
+                    st.success("Adicionada ao CRM! A vaga some da lista.")
                     st.rerun()
             st.divider()
+
+    if not vagas_interesse:
+        st.info("Nenhuma vaga pendente. Adicione URLs acima e clique em **Salvar em Vagas de Interesse**.")
 

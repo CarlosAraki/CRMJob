@@ -78,6 +78,48 @@ def init_db():
         )
     """)
 
+    # Vagas de interesse (banco separado — some quando adicionada ao CRM)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS vagas_interesse (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL UNIQUE,
+            empresa TEXT NOT NULL,
+            cargo TEXT NOT NULL,
+            plataforma TEXT,
+            local TEXT,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # Migração: popular com dados iniciais se vazia
+    cursor.execute("SELECT COUNT(*) FROM vagas_interesse")
+    if cursor.fetchone()[0] == 0:
+        _vagas_iniciais = [
+            ("https://job-boards.greenhouse.io/agibank/jobs/5115376008?gh_src=LinkedIn", "Agibank", "IT Architecture Manager", "Greenhouse", "Campinas/SP"),
+            ("https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers/job/CAMPINAS/SSD-Brasil---IT-Leader--Data-Center-_Req1506712", "Santander", "IT Leader - Data Center", "Workday", "Campinas"),
+            ("https://careers.unilever.com/en/job/-/-/34155/92655028112", "Unilever", "Coordenador de Tecnologia e Inovação Packing", "Unilever Careers", "Vinhedo/SP"),
+            ("https://kpmg.inhire.app/vagas/560350ce-3465-43fd-b6f3-2f6e64a65fa6/gerente-de-transformacao-ia-latam", "KPMG", "Gerente de Transformação IA Latam", "InHire", "Remoto"),
+            ("https://meta.jobs.recrut.ai/vagas/job/YBXY4J?source=linkedin", "Meta", "Tech Lead I", "Recrut.AI", "Remoto"),
+            ("https://cpqd.recruitee.com/o/gerente-executivo-de-solucoes-foco-em-ia-e-ciencia-de-dados", "CPQD", "Gerente Executivo - IA e Ciência de Dados", "Recruitee", "Campinas (Híbrido)"),
+            ("https://unimedcampinas.gupy.io/job/eyJqb2JJZCI6MTA3MTIyMzQsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Unimed Campinas", "Coordenador(a) de Processos", "Gupy", "Campinas"),
+            ("https://hospitalcare.gupy.io/job/eyJqb2JJZCI6MTA4MjUzMjIsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Hospital Care", "Coordenador de TI", "Gupy", "Rede Hospitalar"),
+            ("https://career8.successfactors.com/sfcareer/jobreqcareer?jobId=538610&company=lan", "LATAM", "Digital Team Lead", "SuccessFactors", "Santiago/Chile"),
+            ("https://voeazul.gupy.io/job/eyJqb2JJZCI6MTA5NTI0NjEsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Azul", "Supervisor Infraestrutura", "Gupy", "Campinas"),
+            ("https://careers.unilever.com/en/job/-/-/34155/92608245408", "Unilever", "Coordenador de Tecnologia e Inovação Hair", "Unilever Careers", "Vinhedo/SP"),
+            ("https://careers.deere.com/careers/job/137479375222", "John Deere", "Gerente de Data Science", "John Deere", "Indaiatuba/SP"),
+            ("https://careers.dhl.com/global/en/job/DPDHGLOBALBR38599ENGLOBALEXTERNALLUMESSELATAM/Gerência-de-TI", "DHL", "Gerência de TI", "DHL", "Campinas"),
+            ("https://ambevtech.gupy.io/jobs/10713674?jobBoardSource=linkedin", "Ambev Tech", "Gerente Tech I", "Gupy", "Campinas/Jaguariúna"),
+            ("https://rumolog.gupy.io/job/eyJqb2JJZCI6MTA4MTcwMzUsInNvdXJjZSI6ImxpbmtlZGluIn0=", "Rumo", "Coordenador(a) Infraestrutura TI", "Gupy", "Indaiatuba/SP"),
+            ("https://grupoboticario.gupy.io/jobs/10777868?jobBoardSource=linkedin", "Grupo Boticário", "Tech Manager I (B2B e B2P)", "Gupy", "Curitiba/Remoto"),
+        ]
+        for row in _vagas_iniciais:
+            try:
+                cursor.execute(
+                    """INSERT OR IGNORE INTO vagas_interesse (url, empresa, cargo, plataforma, local) VALUES (?, ?, ?, ?, ?)""",
+                    row,
+                )
+            except Exception:
+                pass
+
     # Documentos vinculados às vagas (currículo enviado + anexos)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS vaga_documentos (
@@ -263,6 +305,52 @@ def excluir_vaga(vaga_id: int) -> bool:
     conn.commit()
     conn.close()
     return affected > 0
+
+
+# --- Vagas de interesse (banco separado) ---
+def listar_vagas_interesse_pendentes() -> list[dict]:
+    """Lista vagas de interesse que ainda NÃO estão no CRM (desaparecem quando ✓ No CRM)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT vi.* FROM vagas_interesse vi
+        WHERE vi.url NOT IN (SELECT link FROM vagas WHERE link IS NOT NULL AND link != '')
+        ORDER BY vi.criado_em DESC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def inserir_vaga_interesse(url: str, empresa: str, cargo: str, plataforma: str = "", local: str = "") -> int:
+    """Adiciona vaga ao banco de interesse. Retorna id ou -1 se URL duplicada."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """INSERT INTO vagas_interesse (url, empresa, cargo, plataforma, local) VALUES (?, ?, ?, ?, ?)""",
+            (url.strip(), empresa, cargo, plataforma or "", local or ""),
+        )
+        cid = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return cid
+    except sqlite3.IntegrityError:
+        conn.close()
+        return -1
+
+
+def remover_vaga_interesse_por_url(url: str) -> bool:
+    """Remove vaga do interesse (ex.: quando adicionada ao CRM e usuário quer que suma da lista)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM vagas_interesse WHERE url = ?", (url.strip(),))
+    n = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return n > 0
 
 
 def listar_vagas_para_alerta() -> list[dict]:
