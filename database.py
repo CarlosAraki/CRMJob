@@ -72,19 +72,46 @@ def init_db():
     conn.close()
 
 
-def listar_vagas(filtro_status: Optional[str] = None) -> list[dict]:
-    """Lista todas as vagas, opcionalmente filtradas por status."""
+def listar_vagas(
+    filtro_status: Optional[str] = None,
+    filtro_empresa: Optional[str] = None,
+    filtro_plataforma: Optional[str] = None,
+    ordenar_por: str = "criado_em",
+    ordem: str = "desc",
+) -> list[dict]:
+    """Lista vagas com filtros e ordenação."""
     conn = get_connection()
     cursor = conn.cursor()
 
-    if filtro_status:
-        cursor.execute(
-            "SELECT * FROM vagas WHERE status = ? ORDER BY criado_em DESC",
-            (filtro_status,),
-        )
-    else:
-        cursor.execute("SELECT * FROM vagas ORDER BY criado_em DESC")
+    where_parts = []
+    params = []
 
+    if filtro_status:
+        where_parts.append("status = ?")
+        params.append(filtro_status)
+    if filtro_empresa and filtro_empresa.strip():
+        where_parts.append("LOWER(empresa) LIKE ?")
+        params.append(f"%{filtro_empresa.strip().lower()}%")
+    if filtro_plataforma and filtro_plataforma.strip():
+        where_parts.append("LOWER(plataforma) LIKE ?")
+        params.append(f"%{filtro_plataforma.strip().lower()}%")
+
+    where_sql = " AND ".join(where_parts) if where_parts else "1=1"
+
+    order_col = {
+        "data_limite": "data_limite",
+        "empresa": "empresa",
+        "criado_em": "criado_em",
+    }.get(ordenar_por, "criado_em")
+    dir_sql = "ASC" if ordem.lower() == "asc" else "DESC"
+    # NULL data_limite no fim quando ordenar por data
+    if order_col == "data_limite":
+        order_sql = f"COALESCE({order_col}, '9999-99-99') {dir_sql}"
+    else:
+        order_sql = f"{order_col} {dir_sql}"
+
+    sql = f"SELECT * FROM vagas WHERE {where_sql} ORDER BY {order_sql}"
+    cursor.execute(sql, params)
     rows = cursor.fetchall()
     conn.close()
 

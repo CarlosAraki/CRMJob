@@ -21,14 +21,42 @@ def render():
     st.title("Funil de Vagas")
     st.caption("Gerencie suas oportunidades de emprego em um fluxo visual")
 
-    # Filtro e visualização
-    col_filtro, col_vis = st.columns([2, 1])
-    with col_filtro:
-        filtro_status = st.selectbox(
-            "Filtrar por status",
-            options=["Todos"] + STATUS_VAGAS,
-            key="crm_filtro",
-        )
+    # Filtros, ordenação e visualização
+    with st.expander("🔍 Filtros e Ordenação", expanded=False):
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            filtro_status = st.selectbox(
+                "Status",
+                options=["Todos"] + STATUS_VAGAS,
+                key="crm_filtro",
+            )
+        with c2:
+            filtro_empresa = st.text_input(
+                "Empresa (busca parcial)",
+                placeholder="Ex: Gupy",
+                key="crm_filtro_empresa",
+            )
+        with c3:
+            filtro_plataforma = st.text_input(
+                "Plataforma (busca parcial)",
+                placeholder="Ex: Greenhouse",
+                key="crm_filtro_plat",
+            )
+        with c4:
+            opt_ordenar = st.selectbox(
+                "Ordenar por",
+                options=[
+                    ("Data limite (mais urgente)", "data_limite", "asc"),
+                    ("Empresa A–Z", "empresa", "asc"),
+                    ("Recém adicionadas", "criado_em", "desc"),
+                ],
+                format_func=lambda x: x[0],
+                key="crm_ordenar",
+            )
+            ordenar_por = opt_ordenar[1]
+            ordem = opt_ordenar[2]
+
+    col_vis, _ = st.columns([1, 3])
     with col_vis:
         modo_visual = st.radio(
             "Visualização",
@@ -58,7 +86,13 @@ def render():
         return
 
     # Listagem
-    vagas = listar_vagas(filtro_status if filtro_status != "Todos" else None)
+    vagas = listar_vagas(
+        filtro_status=filtro_status if filtro_status != "Todos" else None,
+        filtro_empresa=filtro_empresa or None,
+        filtro_plataforma=filtro_plataforma or None,
+        ordenar_por=ordenar_por,
+        ordem=ordem,
+    )
 
     if not vagas:
         st.info("Nenhuma vaga cadastrada. Clique em **Nova Vaga** para começar.")
@@ -179,12 +213,12 @@ def render_tabela(vagas: list):
                     st.rerun()
 
             with col_info:
-                data_lim = f" até {v['data_limite']}" if v["data_limite"] else ""
+                data_lim = f" até {v['data_limite']}" if v.get("data_limite") else ""
                 plat = f" ({v['plataforma']})" if v.get("plataforma") else ""
                 st.markdown(
                     f"**{v['cargo']}** @ *{v['empresa']}*{data_lim}{plat}"
                 )
-                if v["link"]:
+                if v.get("link"):
                     st.caption(f"[Ver vaga]({v['link']})")
 
             with col_acoes:
@@ -202,39 +236,54 @@ def render_tabela(vagas: list):
             st.divider()
 
 
+# Cores por status para visualização no Kanban
+CORES_STATUS = {
+    "Mapeada": "#e3f2fd",      # azul claro
+    "Em Adaptação": "#fff3e0",  # laranja claro
+    "Currículo Enviado": "#e8f5e9",  # verde claro
+    "Entrevista": "#f3e5f5",   # roxo claro
+    "Proposta": "#e8eaf6",     # índigo claro
+    "Rejeitada": "#ffebee",    # vermelho claro
+}
+
+
 def render_kanban(vagas: list):
-    """Renderiza o Kanban com colunas por status."""
+    """Renderiza o Kanban com colunas por status e cores visuais."""
     colunas = st.columns(len(STATUS_VAGAS))
 
     for i, status in enumerate(STATUS_VAGAS):
-                with colunas[i]:
-                    st.markdown(f"**{status}**")
-                    vagas_status = [v for v in vagas if v["status"] == status]
-                    for v in vagas_status:
-                        with st.container():
-                            st.markdown(f"**{v['cargo']}**")
-                            plat = f" • {v['plataforma']}" if v.get("plataforma") else ""
-                            st.caption(f"{v['empresa']}{plat}")
-                    if v["data_limite"]:
+        with colunas[i]:
+            cor = CORES_STATUS.get(status, "#f5f5f5")
+            st.markdown(
+                f'<div style="background:{cor}; padding:8px 12px; border-radius:8px; margin-bottom:8px; '
+                f'border-left:4px solid {cor}; font-weight:bold;">{status}</div>',
+                unsafe_allow_html=True,
+            )
+            vagas_status = [v for v in vagas if v["status"] == status]
+            for v in vagas_status:
+                with st.container():
+                    st.markdown(f"**{v['cargo']}**")
+                    plat = f" • {v['plataforma']}" if v.get("plataforma") else ""
+                    st.caption(f"{v['empresa']}{plat}")
+                    if v.get("data_limite"):
                         st.caption(f"📅 {v['data_limite']}")
 
                     col_a, col_b = st.columns(2)
                     with col_a:
-                        if st.button("📝", key=f"k_edit_{v['id']}"):
+                        if st.button("📝", key=f"k_edit_{i}_{v['id']}", help="Editar"):
                             st.session_state["crm_editar_vaga_id"] = v["id"]
                             st.rerun()
                     with col_b:
-                        if st.button("📋", key=f"k_prompt_{v['id']}", help="Gerar Prompt"):
+                        if st.button("📋", key=f"k_prompt_{i}_{v['id']}", help="Gerar Prompt"):
                             st.session_state["gerador_vaga_id"] = v["id"]
                             st.session_state["navegar_para"] = "gerador_prompts"
                             st.rerun()
 
-                    # Dropdown para mudar status
                     opcoes = ["-- Mover --"] + [s for s in STATUS_VAGAS if s != status]
                     novo = st.selectbox(
                         "Mover para",
                         opcoes,
-                        key=f"k_move_{v['id']}",
+                        key=f"k_move_{i}_{v['id']}",
                         label_visibility="collapsed",
                     )
                     if novo and novo != "-- Mover --":

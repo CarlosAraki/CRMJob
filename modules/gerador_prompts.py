@@ -95,15 +95,15 @@ def render():
                 try:
                     pyperclip.copy(texto)
                     st.success("Prompt copiado para a área de transferência!")
-                except Exception as e:
+                except Exception:
                     st.warning(
-                        f"Não foi possível copiar automaticamente. "
-                        f"Selecione o texto acima e use Ctrl+C. Erro: {e}"
+                        "Cópia automática indisponível (comum em Linux/Docker). "
+                        "**Selecione o texto na caixa acima** e use Ctrl+C (ou Cmd+C no Mac) para copiar."
                     )
             else:
                 st.info(
                     "Instale 'pyperclip' para copiar automaticamente: "
-                    "pip install pyperclip. Por ora, selecione o texto e use Ctrl+C."
+                    "Por ora, selecione o texto na caixa acima e use Ctrl+C (ou Cmd+C no Mac)."
                 )
 
     with col_voltar:
