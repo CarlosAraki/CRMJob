@@ -76,8 +76,9 @@ def listar_vagas(
     filtro_status: Optional[str] = None,
     filtro_empresa: Optional[str] = None,
     filtro_plataforma: Optional[str] = None,
-    ordenar_por: str = "criado_em",
-    ordem: str = "desc",
+    ordenar_por: str = "prioridade_funil",
+    ordem: str = "asc",
+    excluir_rejeitadas: bool = True,
 ) -> list[dict]:
     """Lista vagas com filtros e ordenação."""
     conn = get_connection()
@@ -89,6 +90,8 @@ def listar_vagas(
     if filtro_status:
         where_parts.append("status = ?")
         params.append(filtro_status)
+    elif excluir_rejeitadas:
+        where_parts.append("status != 'Rejeitada'")
     if filtro_empresa and filtro_empresa.strip():
         where_parts.append("LOWER(empresa) LIKE ?")
         params.append(f"%{filtro_empresa.strip().lower()}%")
@@ -98,17 +101,25 @@ def listar_vagas(
 
     where_sql = " AND ".join(where_parts) if where_parts else "1=1"
 
-    order_col = {
-        "data_limite": "data_limite",
-        "empresa": "empresa",
-        "criado_em": "criado_em",
-    }.get(ordenar_por, "criado_em")
-    dir_sql = "ASC" if ordem.lower() == "asc" else "DESC"
-    # NULL data_limite no fim quando ordenar por data
-    if order_col == "data_limite":
-        order_sql = f"COALESCE({order_col}, '9999-99-99') {dir_sql}"
+    # Prioridade: Proposta, Entrevista, Currículo Enviado, Em Adaptação, Mapeada, Rejeitada
+    if ordenar_por == "prioridade_funil":
+        order_sql = (
+            "CASE status "
+            "WHEN 'Proposta' THEN 1 WHEN 'Entrevista' THEN 2 WHEN 'Currículo Enviado' THEN 3 "
+            "WHEN 'Em Adaptação' THEN 4 WHEN 'Mapeada' THEN 5 WHEN 'Rejeitada' THEN 6 "
+            "ELSE 7 END ASC, COALESCE(data_limite, '9999-99-99') ASC"
+        )
     else:
-        order_sql = f"{order_col} {dir_sql}"
+        order_col = {
+            "data_limite": "data_limite",
+            "empresa": "empresa",
+            "criado_em": "criado_em",
+        }.get(ordenar_por, "criado_em")
+        dir_sql = "ASC" if ordem.lower() == "asc" else "DESC"
+        if order_col == "data_limite":
+            order_sql = f"COALESCE({order_col}, '9999-99-99') {dir_sql}"
+        else:
+            order_sql = f"{order_col} {dir_sql}"
 
     sql = f"SELECT * FROM vagas WHERE {where_sql} ORDER BY {order_sql}"
     cursor.execute(sql, params)

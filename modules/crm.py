@@ -23,7 +23,7 @@ def render():
 
     # Filtros, ordenação e visualização
     with st.expander("🔍 Filtros e Ordenação", expanded=False):
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
         with c1:
             filtro_status = st.selectbox(
                 "Status",
@@ -31,21 +31,28 @@ def render():
                 key="crm_filtro",
             )
         with c2:
+            ocultar_rejeitadas = st.checkbox(
+                "Ocultar Rejeitadas",
+                value=True,
+                key="crm_ocultar_rejeitadas",
+            )
+        with c3:
             filtro_empresa = st.text_input(
                 "Empresa (busca parcial)",
                 placeholder="Ex: Gupy",
                 key="crm_filtro_empresa",
             )
-        with c3:
+        with c4:
             filtro_plataforma = st.text_input(
                 "Plataforma (busca parcial)",
                 placeholder="Ex: Greenhouse",
                 key="crm_filtro_plat",
             )
-        with c4:
+        with c5:
             opt_ordenar = st.selectbox(
                 "Ordenar por",
                 options=[
+                    ("Prioridade do funil", "prioridade_funil", ""),
                     ("Data limite (mais urgente)", "data_limite", "asc"),
                     ("Empresa A–Z", "empresa", "asc"),
                     ("Recém adicionadas", "criado_em", "desc"),
@@ -54,7 +61,7 @@ def render():
                 key="crm_ordenar",
             )
             ordenar_por = opt_ordenar[1]
-            ordem = opt_ordenar[2]
+            ordem = opt_ordenar[2] if opt_ordenar[2] else "asc"
 
     col_vis, _ = st.columns([1, 3])
     with col_vis:
@@ -92,6 +99,7 @@ def render():
         filtro_plataforma=filtro_plataforma or None,
         ordenar_por=ordenar_por,
         ordem=ordem,
+        excluir_rejeitadas=ocultar_rejeitadas,
     )
 
     if not vagas:
@@ -99,7 +107,7 @@ def render():
         return
 
     if modo_visual == "Kanban":
-        render_kanban(vagas)
+        render_kanban(vagas, ocultar_rejeitadas=ocultar_rejeitadas)
     else:
         render_tabela(vagas)
 
@@ -242,22 +250,23 @@ def render_tabela(vagas: list):
             st.divider()
 
 
-# Cores por status para visualização no Kanban
+# Cores fortes e distintas por status
 CORES_STATUS = {
-    "Mapeada": "#e3f2fd",      # azul claro
-    "Em Adaptação": "#fff3e0",  # laranja claro
-    "Currículo Enviado": "#e8f5e9",  # verde claro
-    "Entrevista": "#f3e5f5",   # roxo claro
-    "Proposta": "#e8eaf6",     # índigo claro
-    "Rejeitada": "#ffebee",    # vermelho claro
+    "Mapeada": "#90CAF9",           # azul
+    "Em Adaptação": "#FFB74D",      # laranja
+    "Currículo Enviado": "#66BB6A",  # verde
+    "Entrevista": "#AB47BC",        # roxo
+    "Proposta": "#5C6BC0",          # índigo
+    "Rejeitada": "#EF5350",         # vermelho
 }
 
 
-def render_kanban(vagas: list):
+def render_kanban(vagas: list, ocultar_rejeitadas: bool = True):
     """Renderiza o Kanban com colunas por status e cores visuais."""
-    colunas = st.columns(len(STATUS_VAGAS))
+    status_visiveis = [s for s in STATUS_VAGAS if s != "Rejeitada" or not ocultar_rejeitadas]
+    colunas = st.columns(len(status_visiveis))
 
-    for i, status in enumerate(STATUS_VAGAS):
+    for i, status in enumerate(status_visiveis):
         with colunas[i]:
             cor = CORES_STATUS.get(status, "#f5f5f5")
             st.markdown(
