@@ -180,6 +180,12 @@ def render_editar_vaga(vaga_id: int):
         plataforma = st.text_input("Plataforma", value=vaga.get("plataforma") or "")
         status = st.selectbox("Status", STATUS_VAGAS, index=STATUS_VAGAS.index(vaga["status"]))
 
+        st.caption("📄 Para vincular currículo e anexos, use o módulo **Currículos e Documentos**.")
+        if st.button("📄 Ir para Documentos desta vaga", key="btn_docs_vaga_edit"):
+            st.session_state["curriculums_vaga_id"] = vaga_id
+            st.session_state["navegar_para"] = "curriculums"
+            st.rerun()
+
         col1, col2 = st.columns(2)
         with col1:
             if st.form_submit_button("Salvar"):
@@ -255,6 +261,10 @@ def render_tabela(vagas: list):
                 if st.button("📝 Editar", key=f"edit_{v['id']}"):
                     st.session_state["crm_editar_vaga_id"] = v["id"]
                     st.rerun()
+                if st.button("📄 Docs", key=f"docs_{v['id']}", help="Documentos da vaga"):
+                    st.session_state["curriculums_vaga_id"] = v["id"]
+                    st.session_state["navegar_para"] = "curriculums"
+                    st.rerun()
                 if st.button("📋 Prompt", key=f"prompt_{v['id']}"):
                     st.session_state["gerador_vaga_id"] = v["id"]
                     st.session_state["navegar_para"] = "gerador_prompts"
@@ -299,12 +309,17 @@ def render_kanban(vagas: list, ocultar_rejeitadas: bool = True):
                     if v.get("data_limite"):
                         st.caption(f"📅 {v['data_limite']}")
 
-                    col_a, col_b = st.columns(2)
+                    col_a, col_b, col_c = st.columns(3)
                     with col_a:
                         if st.button("📝", key=f"k_edit_{i}_{v['id']}", help="Editar"):
                             st.session_state["crm_editar_vaga_id"] = v["id"]
                             st.rerun()
                     with col_b:
+                        if st.button("📄", key=f"k_docs_{i}_{v['id']}", help="Documentos"):
+                            st.session_state["curriculums_vaga_id"] = v["id"]
+                            st.session_state["navegar_para"] = "curriculums"
+                            st.rerun()
+                    with col_c:
                         if st.button("📋", key=f"k_prompt_{i}_{v['id']}", help="Gerar Prompt"):
                             st.session_state["gerador_vaga_id"] = v["id"]
                             st.session_state["navegar_para"] = "gerador_prompts"

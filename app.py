@@ -12,6 +12,7 @@ from modules.alertas_telegram import render as render_alertas_telegram
 from modules.busca_ativa import render as render_busca_ativa
 from modules.atalhos_busca import render as render_atalhos_busca
 from modules.importador_urls import render as render_importador_urls
+from modules.curriculums import render as render_curriculums
 
 
 # Configuração da página
@@ -36,9 +37,10 @@ with st.sidebar:
 
     modulo = st.radio(
         "Módulos",
-        options=["crm", "gerador_prompts", "alertas_telegram", "busca_ativa", "atalhos_busca", "importador_urls"],
+        options=["crm", "curriculums", "gerador_prompts", "alertas_telegram", "busca_ativa", "atalhos_busca", "importador_urls"],
         format_func=lambda x: {
             "crm": "📋 Funil de Vagas (CRM)",
+            "curriculums": "📄 Currículos e Documentos",
             "gerador_prompts": "✨ Gerador de Prompts",
             "alertas_telegram": "🔔 Alertas Telegram",
             "busca_ativa": "🔍 Busca Ativa",
@@ -69,3 +71,6 @@ elif modulo == "atalhos_busca":
 elif modulo == "importador_urls":
     st.session_state["modulo_atual"] = "importador_urls"
     render_importador_urls()
+elif modulo == "curriculums":
+    st.session_state["modulo_atual"] = "curriculums"
+    render_curriculums()

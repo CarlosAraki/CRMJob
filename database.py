@@ -67,7 +67,32 @@ def init_db():
         )
     """)
 
-    # Remove a constraint inválida do status (SQLite não suporta FK para CHECK assim)
+    # Currículos (versionamento de PDFs)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS curriculums (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            versao TEXT NOT NULL,
+            caminho_arquivo TEXT NOT NULL,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Documentos vinculados às vagas (currículo enviado + anexos)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS vaga_documentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vaga_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL,
+            curriculum_id INTEGER,
+            caminho_arquivo TEXT,
+            nome TEXT NOT NULL,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (vaga_id) REFERENCES vagas(id),
+            FOREIGN KEY (curriculum_id) REFERENCES curriculums(id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -231,6 +256,7 @@ def excluir_vaga(vaga_id: int) -> bool:
     """Exclui uma vaga."""
     conn = get_connection()
     cursor = conn.cursor()
+    cursor.execute("DELETE FROM vaga_documentos WHERE vaga_id = ?", (vaga_id,))
     cursor.execute("DELETE FROM interacoes WHERE vaga_id = ?", (vaga_id,))
     cursor.execute("DELETE FROM vagas WHERE id = ?", (vaga_id,))
     affected = cursor.rowcount
@@ -268,6 +294,110 @@ def obter_config(chave: str) -> Optional[str]:
     row = cursor.fetchone()
     conn.close()
     return row["valor"] if row else None
+
+
+# --- Currículos ---
+def listar_curriculums() -> list[dict]:
+    """Lista todos os currículos versionados."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM curriculums ORDER BY criado_em DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def inserir_curriculum(nome: str, versao: str, caminho_arquivo: str) -> int:
+    """Insere novo currículo versionado."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO curriculums (nome, versao, caminho_arquivo) VALUES (?, ?, ?)",
+        (nome, versao, caminho_arquivo),
+    )
+    cid = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return cid
+
+
+def obter_curriculum(curriculum_id: int) -> Optional[dict]:
+    """Retorna currículo por ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM curriculums WHERE id = ?", (curriculum_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def excluir_curriculum(curriculum_id: int) -> bool:
+    """Exclui currículo (desvincula de vagas antes)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE vaga_documentos SET curriculum_id = NULL WHERE curriculum_id = ?", (curriculum_id,))
+    cursor.execute("DELETE FROM curriculums WHERE id = ?", (curriculum_id,))
+    n = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return n > 0
+
+
+# --- Documentos vinculados às vagas ---
+TIPOS_DOCUMENTO = ["curriculum", "resposta_vaga", "carta_apresentacao", "carta_recomendacao"]
+
+
+def listar_documentos_vaga(vaga_id: int) -> list[dict]:
+    """Lista documentos vinculados a uma vaga."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT d.*, c.nome as curriculum_nome, c.versao as curriculum_versao
+        FROM vaga_documentos d
+        LEFT JOIN curriculums c ON d.curriculum_id = c.id
+        WHERE d.vaga_id = ?
+        ORDER BY d.tipo, d.criado_em DESC
+        """,
+        (vaga_id,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def vincular_documento_vaga(
+    vaga_id: int,
+    tipo: str,
+    nome: str,
+    curriculum_id: Optional[int] = None,
+    caminho_arquivo: Optional[str] = None,
+) -> int:
+    """Vincula documento a uma vaga. Retorna ID do documento."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO vaga_documentos (vaga_id, tipo, curriculum_id, caminho_arquivo, nome)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (vaga_id, tipo, curriculum_id, caminho_arquivo, nome),
+    )
+    did = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return did
+
+
+def excluir_documento_vaga(documento_id: int) -> bool:
+    """Exclui documento vinculado à vaga."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM vaga_documentos WHERE id = ?", (documento_id,))
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
 
 
 def salvar_config(chave: str, valor: str) -> None:
