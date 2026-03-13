@@ -67,13 +67,20 @@ def verificar_e_enviar_alertas() -> tuple[int, list[str]]:
         link = (vaga.get("link") or "").strip()
         plataforma = vaga.get("plataforma") or ""
         data_mapeada = (vaga.get("criado_em") or "")[:10]
+        data_limite = vaga.get("data_limite") or ""
+        status = vaga.get("status", "")
 
-        # Texto simples (evita erro com caracteres especiais em Markdown)
+        # Motivo do alerta
+        if data_limite and status not in ("Rejeitada",):
+            motivo = f"📅 Data limite em {data_limite}"
+        else:
+            motivo = f"📅 Mapeada desde {data_mapeada} — ainda sem aplicação"
+
         msg = (
             f"⚠️ Alerta CRM Busca de Emprego\n\n"
-            f"Você mapeou a vaga de {cargo} na {empresa} "
-            f"e ainda não aplicou. O prazo está correndo!\n\n"
-            f"📅 Mapeada desde: {data_mapeada}\n"
+            f"{cargo} na {empresa}\n"
+            f"Status: {status}\n"
+            f"{motivo}\n"
         )
         if plataforma:
             msg += f"📋 Plataforma: {plataforma}\n"
@@ -95,8 +102,8 @@ def render():
     """Renderiza o módulo de Alertas Telegram."""
     st.title("Alertas via Telegram")
     st.caption(
-        "Configure seu bot e receba avisos quando vagas mapeadas há mais de 2 dias "
-        "ainda não tiverem currículo enviado."
+        "Configure seu bot e receba avisos quando: vagas Mapeada/Em Adaptação há mais de 2 dias "
+        "sem envio, ou quando houver data limite nos próximos 3 dias."
     )
 
     st.divider()
@@ -163,13 +170,16 @@ def render():
 
     if vagas_pendentes:
         st.warning(
-            f"Encontradas **{len(vagas_pendentes)}** vaga(s) mapeada(s) há mais de "
-            f"{DIAS_ALERTA} dias sem aplicação:"
+            f"Encontradas **{len(vagas_pendentes)}** vaga(s) para alerta "
+            f"(mapeadas há 2+ dias sem envio ou com data limite próxima):"
         )
         for v in vagas_pendentes:
-            st.markdown(f"- **{v['cargo']}** @ {v['empresa']} (desde {v['criado_em'][:10]})")
+            info = v.get("criado_em", "")[:10]
+            if v.get("data_limite"):
+                info = f"limite {v['data_limite']}"
+            st.markdown(f"- **{v['cargo']}** @ {v['empresa']} ({v['status']}) — {info}")
     else:
-        st.info("Nenhuma vaga mapeada há mais de 2 dias pendente de alerta.")
+        st.info("Nenhuma vaga pendente de alerta no momento.")
 
     if st.button("Enviar alertas agora", type="primary", key="btn_enviar_alertas"):
         enviados, erros = verificar_e_enviar_alertas()

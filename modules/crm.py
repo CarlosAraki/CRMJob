@@ -196,8 +196,9 @@ def render_editar_vaga(vaga_id: int):
 
 
 def render_tabela(vagas: list):
-    """Renderiza a lista de vagas em formato tabela."""
+    """Renderiza a lista de vagas em formato tabela com cores por status."""
     for v in vagas:
+        cor = CORES_STATUS.get(v["status"], "#f5f5f5")
         with st.container():
             col_status, col_info, col_acoes = st.columns([1, 4, 2])
             with col_status:
@@ -211,6 +212,11 @@ def render_tabela(vagas: list):
                 if novo_status != v["status"]:
                     atualizar_vaga(v["id"], status=novo_status)
                     st.rerun()
+                st.markdown(
+                    f'<span style="background:{cor}; padding:3px 8px; border-radius:6px; '
+                    f'font-size:0.75em; display:inline-block; margin-top:4px;">{v["status"]}</span>',
+                    unsafe_allow_html=True,
+                )
 
             with col_info:
                 data_lim = f" até {v['data_limite']}" if v.get("data_limite") else ""

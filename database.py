@@ -230,19 +230,27 @@ def excluir_vaga(vaga_id: int) -> bool:
 
 def listar_vagas_mapeadas_antigas(dias: int = 2) -> list[dict]:
     """
-    Retorna vagas com status 'Mapeada' criadas há mais de X dias
-    (para envio de alertas de prazo).
+    Retorna vagas para alerta: status Mapeada/Em Adaptação há mais de X dias,
+    OU com data_limite nos próximos dias (qualquer status exceto Rejeitada).
+    Evita duplicatas via SELECT DISTINCT.
     """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT * FROM vagas
-        WHERE status = 'Mapeada'
-        AND date(criado_em) <= date('now', '-' || ? || ' days')
-        ORDER BY criado_em ASC
+        SELECT DISTINCT v.* FROM vagas v
+        WHERE v.id IN (
+            SELECT id FROM vagas
+            WHERE (status IN ('Mapeada', 'Em Adaptação')
+                   AND date(criado_em) <= date('now', '-' || ? || ' days'))
+            OR (status != 'Rejeitada'
+                AND data_limite IS NOT NULL
+                AND date(data_limite) >= date('now')
+                AND date(data_limite) <= date('now', '+' || ? || ' days'))
+        )
+        ORDER BY COALESCE(data_limite, '9999-99-99') ASC, criado_em ASC
         """,
-        (dias,),
+        (dias, 3),
     )
     rows = cursor.fetchall()
     conn.close()
