@@ -51,6 +51,4 @@ Para parar: `docker compose down`
 
 6. **Importar por URL** – Suas vagas de interesse (Agibank, Santander, Unilever, KPMG, Meta, CPQD, Unimed, Hospital Care, LATAM, Azul, John Deere, DHL, Ambev, Rumo, Boticário). Reconhece Greenhouse, Gupy, Workday, Recruitee e outras plataformas
 
-## Perfil
 
-Configurado para: CTO, Head de TI, CIO, Diretor de TI — setores Saúde, Fintechs — localização Campinas, SP, Remoto.
