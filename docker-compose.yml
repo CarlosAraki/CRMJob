@@ -1,0 +1,14 @@
+services:
+  crm-job:
+    build: .
+    container_name: crm-busca-emprego
+    ports:
+      - "9991:9991"
+    volumes:
+      - crm-data:/app/data
+    environment:
+      - DB_PATH=/app/data/crm_job.db
+    restart: unless-stopped
+
+volumes:
+  crm-data:
